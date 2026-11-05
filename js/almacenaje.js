@@ -620,4 +620,135 @@ export async function eliminarIntercambio(id) {
     return true;
 }
 
+/* =====================================================
+   9. GESTIÓN DE SELECCIONES DEL DASHBOARD
+   ===================================================== */
+
+// Guarda un intercambio en la selección de un usuario.
+export async function guardarSeleccion(idUsuario, idIntercambio) {
+    const identificadorUsuario = Number(idUsuario);
+    const identificadorIntercambio = Number(idIntercambio);
+
+    if (!Number.isInteger(identificadorUsuario) || identificadorUsuario <= 0) {
+        throw new Error("El identificador del usuario no es válido.");
+    }
+
+    if (!Number.isInteger(identificadorIntercambio) || identificadorIntercambio <= 0) {
+        throw new Error("El identificador del intercambio no es válido.");
+    }
+
+    // Comprobar que el usuario existe.
+    const usuario = await ejecutarSolicitud(
+        "usuarios",
+        "readonly",
+        (almacen) => almacen.get(identificadorUsuario)
+    );
+
+    if (!usuario) {
+        throw new Error("No existe el usuario seleccionado.");
+    }
+
+    // Comprobar que el intercambio existe.
+    const intercambio = await ejecutarSolicitud(
+        "intercambios",
+        "readonly",
+        (almacen) => almacen.get(identificadorIntercambio)
+    );
+
+    if (!intercambio) {
+        throw new Error("No existe el intercambio que deseas seleccionar.");
+    }
+
+    const seleccion = {
+        idUsuario: identificadorUsuario,
+        idIntercambio: identificadorIntercambio,
+        fechaSeleccion: new Date().toISOString()
+    };
+
+    // put evita duplicar una selección del mismo intercambio.
+    await ejecutarSolicitud(
+        "seleccionados",
+        "readwrite",
+        (almacen) => almacen.put(seleccion)
+    );
+
+    return seleccion;
+}
+
+
+// Recupera los intercambios seleccionados por un usuario.
+export async function obtenerSeleccionados(idUsuario) {
+    const identificadorUsuario = Number(idUsuario);
+
+    if (!Number.isInteger(identificadorUsuario) || identificadorUsuario <= 0) {
+        throw new Error("El identificador del usuario no es válido.");
+    }
+
+    const selecciones = await ejecutarSolicitud(
+        "seleccionados",
+        "readonly",
+        (almacen) => almacen.index("idUsuario").getAll(identificadorUsuario)
+    );
+
+    // Recuperar los datos completos de cada intercambio.
+    const intercambios = await Promise.all(
+        selecciones.map(async (seleccion) => {
+            const intercambio = await obtenerIntercambioPorId(
+                seleccion.idIntercambio
+            );
+
+            if (!intercambio) {
+                return null;
+            }
+
+            return {
+                ...intercambio,
+                fechaSeleccion: seleccion.fechaSeleccion
+            };
+        })
+    );
+
+    // Ignorar selecciones cuyo intercambio ya no exista.
+    return intercambios.filter(Boolean);
+}
+
+
+// Retira un intercambio de la selección de un usuario.
+export async function eliminarSeleccion(idUsuario, idIntercambio) {
+    const identificadorUsuario = Number(idUsuario);
+    const identificadorIntercambio = Number(idIntercambio);
+
+    if (!Number.isInteger(identificadorUsuario) || identificadorUsuario <= 0) {
+        throw new Error("El identificador del usuario no es válido.");
+    }
+
+    if (!Number.isInteger(identificadorIntercambio) || identificadorIntercambio <= 0) {
+        throw new Error("El identificador del intercambio no es válido.");
+    }
+
+    const seleccion = await ejecutarSolicitud(
+        "seleccionados",
+        "readonly",
+        (almacen) => almacen.get([
+            identificadorUsuario,
+            identificadorIntercambio
+        ])
+    );
+
+    if (!seleccion) {
+        throw new Error("Este intercambio no está en la selección del usuario.");
+    }
+
+    await ejecutarSolicitud(
+        "seleccionados",
+        "readwrite",
+        (almacen) => almacen.delete([
+            identificadorUsuario,
+            identificadorIntercambio
+        ])
+    );
+
+    return true;
+}
+
 
