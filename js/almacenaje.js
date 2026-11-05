@@ -406,3 +406,218 @@ export async function eliminarUsuario(id) {
 
     return true;
 }
+
+/* =====================================================
+   7. CREACIÓN Y CONSULTA DE INTERCAMBIOS
+   ===================================================== */
+
+// Crea un intercambio asociado a un usuario registrado.
+export async function crearIntercambio(datosIntercambio) {
+    const titulo = String(datosIntercambio?.titulo ?? "").trim();
+    const descripcion = String(datosIntercambio?.descripcion ?? "").trim();
+    const fecha = String(datosIntercambio?.fecha ?? "").trim();
+    const tipo = String(datosIntercambio?.tipo ?? "").trim();
+    const idUsuario = Number(datosIntercambio?.idUsuario);
+
+    // Validación de campos obligatorios.
+    if (!titulo || !descripcion || !fecha || !tipo) {
+        throw new Error("Todos los campos del intercambio son obligatorios.");
+    }
+
+    if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+        throw new Error("El identificador del usuario no es válido.");
+    }
+
+    // Validación de fecha.
+    if (Number.isNaN(Date.parse(fecha))) {
+        throw new Error("La fecha del intercambio no es válida.");
+    }
+
+    // Validación del tipo de intercambio.
+    const tiposPermitidos = ["Ofrezco idioma", "Busco idioma"];
+
+    if (!tiposPermitidos.includes(tipo)) {
+        throw new Error("El tipo de intercambio no es válido.");
+    }
+
+    // Comprobar que el usuario existe.
+    const usuario = await ejecutarSolicitud(
+        "usuarios",
+        "readonly",
+        (almacen) => almacen.get(idUsuario)
+    );
+
+    if (!usuario) {
+        throw new Error("No existe el usuario asociado al intercambio.");
+    }
+
+    // El correo se obtiene del usuario registrado.
+    const intercambio = {
+        titulo,
+        descripcion,
+        fecha,
+        tipo,
+        idUsuario,
+        email: usuario.email
+    };
+
+    const id = await ejecutarSolicitud(
+        "intercambios",
+        "readwrite",
+        (almacen) => almacen.add(intercambio)
+    );
+
+    return {
+        id,
+        ...intercambio
+    };
+}
+
+
+// Obtiene todos los intercambios registrados.
+export async function obtenerIntercambios() {
+    return await ejecutarSolicitud(
+        "intercambios",
+        "readonly",
+        (almacen) => almacen.getAll()
+    );
+}
+
+
+// Obtiene los intercambios publicados por un usuario.
+export async function obtenerIntercambiosPorUsuario(idUsuario) {
+    const identificador = Number(idUsuario);
+
+    if (!Number.isInteger(identificador) || identificador <= 0) {
+        throw new Error("El identificador del usuario no es válido.");
+    }
+
+    return await ejecutarSolicitud(
+        "intercambios",
+        "readonly",
+        (almacen) => almacen.index("idUsuario").getAll(identificador)
+    );
+}
+
+
+// Busca un intercambio por su identificador.
+export async function obtenerIntercambioPorId(id) {
+    const identificador = Number(id);
+
+    if (!Number.isInteger(identificador) || identificador <= 0) {
+        throw new Error("El identificador del intercambio no es válido.");
+    }
+
+    return await ejecutarSolicitud(
+        "intercambios",
+        "readonly",
+        (almacen) => almacen.get(identificador)
+    );
+}
+
+/* =====================================================
+   8. MODIFICACIÓN Y ELIMINACIÓN DE INTERCAMBIOS
+   ===================================================== */
+
+// Modifica un intercambio existente.
+export async function actualizarIntercambio(id, datosIntercambio) {
+    const identificador = Number(id);
+
+    if (!Number.isInteger(identificador) || identificador <= 0) {
+        throw new Error("El identificador del intercambio no es válido.");
+    }
+
+    const titulo = String(datosIntercambio?.titulo ?? "").trim();
+    const descripcion = String(datosIntercambio?.descripcion ?? "").trim();
+    const fecha = String(datosIntercambio?.fecha ?? "").trim();
+    const tipo = String(datosIntercambio?.tipo ?? "").trim();
+    const idUsuario = Number(datosIntercambio?.idUsuario);
+
+    if (!titulo || !descripcion || !fecha || !tipo) {
+        throw new Error("Todos los campos del intercambio son obligatorios.");
+    }
+
+    if (Number.isNaN(Date.parse(fecha))) {
+        throw new Error("La fecha del intercambio no es válida.");
+    }
+
+    const tiposPermitidos = ["Ofrezco idioma", "Busco idioma"];
+
+    if (!tiposPermitidos.includes(tipo)) {
+        throw new Error("El tipo de intercambio no es válido.");
+    }
+
+    if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
+        throw new Error("El identificador del usuario no es válido.");
+    }
+
+    // Comprobar que el intercambio existe.
+    const existente = await ejecutarSolicitud(
+        "intercambios",
+        "readonly",
+        (almacen) => almacen.get(identificador)
+    );
+
+    if (!existente) {
+        throw new Error("No se ha encontrado el intercambio que deseas modificar.");
+    }
+
+    // Comprobar que el usuario asociado existe.
+    const usuario = await ejecutarSolicitud(
+        "usuarios",
+        "readonly",
+        (almacen) => almacen.get(idUsuario)
+    );
+
+    if (!usuario) {
+        throw new Error("No existe el usuario asociado al intercambio.");
+    }
+
+    const intercambioActualizado = {
+        ...existente,
+        titulo,
+        descripcion,
+        fecha,
+        tipo,
+        idUsuario,
+        email: usuario.email
+    };
+
+    await ejecutarSolicitud(
+        "intercambios",
+        "readwrite",
+        (almacen) => almacen.put(intercambioActualizado)
+    );
+
+    return intercambioActualizado;
+}
+
+
+// Elimina un intercambio mediante su identificador.
+export async function eliminarIntercambio(id) {
+    const identificador = Number(id);
+
+    if (!Number.isInteger(identificador) || identificador <= 0) {
+        throw new Error("El identificador del intercambio no es válido.");
+    }
+
+    const existente = await ejecutarSolicitud(
+        "intercambios",
+        "readonly",
+        (almacen) => almacen.get(identificador)
+    );
+
+    if (!existente) {
+        throw new Error("No se ha encontrado el intercambio que deseas eliminar.");
+    }
+
+    await ejecutarSolicitud(
+        "intercambios",
+        "readwrite",
+        (almacen) => almacen.delete(identificador)
+    );
+
+    return true;
+}
+
+
