@@ -699,3 +699,94 @@ export async function eliminarSeleccion(idUsuario, idIntercambio) {
 
     return true;
 }
+
+
+/* =====================================================
+   7. AUTENTICACIÓN DE USUARIOS
+   ===================================================== */
+
+// Convierte una cadena Base64 en un array de bytes.
+function convertirDesdeBase64(valor) {
+    const binario = atob(valor);
+    const bytes = new Uint8Array(binario.length);
+
+    for (let i = 0; i < binario.length; i++) {
+        bytes[i] = binario.charCodeAt(i);
+    }
+
+    return bytes;
+}
+
+
+// Comprueba si una contraseña coincide con el hash almacenado.
+async function verificarCredenciales(password, saltAlmacenada, hashAlmacenado) {
+    const salt = convertirDesdeBase64(saltAlmacenada);
+
+    const clave = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password),
+        "PBKDF2",
+        false,
+        ["deriveBits"]
+    );
+
+    const resultado = await crypto.subtle.deriveBits(
+        {
+            name: "PBKDF2",
+            salt: salt,
+            iterations: 100000,
+            hash: "SHA-256"
+        },
+        clave,
+        256
+    );
+
+    const hashCalculado = new Uint8Array(resultado);
+    const hashOriginal = convertirDesdeBase64(hashAlmacenado);
+
+    if (hashCalculado.length !== hashOriginal.length) {
+        return false;
+    }
+
+    let diferencia = 0;
+
+    for (let i = 0; i < hashCalculado.length; i++) {
+        diferencia |= hashCalculado[i] ^ hashOriginal[i];
+    }
+
+    return diferencia === 0;
+}
+
+
+// Autentica un usuario mediante su correo y contraseña.
+export async function autenticarUsuario(email, password) {
+    const correo = String(email ?? "").trim().toLowerCase();
+    const clave = String(password ?? "");
+
+    if (!correo || !clave) {
+        return null;
+    }
+
+    const usuario = await ejecutarSolicitud(
+        "usuarios",
+        "readonly",
+        (almacen) => almacen.index("email").get(correo)
+    );
+
+    if (!usuario) {
+        return null;
+    }
+
+    const credencialesValidas = await verificarCredenciales(
+        clave,
+        usuario.passwordSalt,
+        usuario.passwordHash
+    );
+
+    if (!credencialesValidas) {
+        return null;
+    }
+
+    return obtenerDatosPublicos(usuario);
+}
+
