@@ -89,6 +89,198 @@ function formatearFecha(fecha) {
 }
 
 
+function generarGraficoCanvas(intercambios) {
+    const canvas = document.getElementById("graficoIntercambios");
+
+    if (!canvas) {
+        return;
+    }
+
+    const contexto = canvas.getContext("2d");
+
+    if (!contexto) {
+        return;
+    }
+
+    const ancho = canvas.width;
+    const alto = canvas.height;
+
+    contexto.clearRect(0, 0, ancho, alto);
+
+    const usuarios = new Map();
+
+    intercambios.forEach((intercambio) => {
+        const email = intercambio.email || `Usuario ${intercambio.idUsuario}`;
+
+        if (!usuarios.has(email)) {
+            usuarios.set(email, {
+                email,
+                ofrece: 0,
+                busca: 0
+            });
+        }
+
+        const usuario = usuarios.get(email);
+
+        if (intercambio.tipo === "Ofrezco idioma") {
+            usuario.ofrece++;
+        } else if (intercambio.tipo === "Busco idioma") {
+            usuario.busca++;
+        }
+    });
+
+    const datos = Array.from(usuarios.values());
+
+    if (datos.length === 0) {
+        contexto.fillStyle = "#6c757d";
+        contexto.font = "16px Arial";
+        contexto.textAlign = "center";
+        contexto.fillText(
+            "No hay datos disponibles para representar.",
+            ancho / 2,
+            alto / 2
+        );
+        return;
+    }
+
+    const margen = {
+        superior: 55,
+        inferior: 70,
+        izquierdo: 65,
+        derecho: 30
+    };
+
+    const anchoGrafico = ancho - margen.izquierdo - margen.derecho;
+    const altoGrafico = alto - margen.superior - margen.inferior;
+
+    const maximoValor = Math.max(
+        1,
+        ...datos.map(usuario => Math.max(usuario.ofrece, usuario.busca))
+    );
+
+    const escalaMaxima = Math.max(5, Math.ceil(maximoValor / 5) * 5);
+
+    // Dibujar leyenda.
+    contexto.font = "13px Arial";
+    contexto.textAlign = "left";
+
+    contexto.fillStyle = "#0d6efd";
+    contexto.fillRect(270, 15, 16, 16);
+    contexto.fillStyle = "#212529";
+    contexto.fillText("Ofrezco idioma", 293, 28);
+
+    contexto.fillStyle = "#198754";
+    contexto.fillRect(460, 15, 16, 16);
+    contexto.fillStyle = "#212529";
+    contexto.fillText("Busco idioma", 483, 28);
+
+    // Dibujar líneas horizontales y valores del eje vertical.
+    contexto.strokeStyle = "#dee2e6";
+    contexto.lineWidth = 1;
+    contexto.font = "12px Arial";
+    contexto.textAlign = "right";
+    contexto.textBaseline = "middle";
+
+    for (let i = 0; i <= 5; i++) {
+        const valor = (escalaMaxima / 5) * i;
+        const posicionY = margen.superior + altoGrafico -
+            (valor / escalaMaxima) * altoGrafico;
+
+        contexto.beginPath();
+        contexto.moveTo(margen.izquierdo, posicionY);
+        contexto.lineTo(ancho - margen.derecho, posicionY);
+        contexto.stroke();
+
+        contexto.fillStyle = "#6c757d";
+        contexto.fillText(
+            valor.toString(),
+            margen.izquierdo - 12,
+            posicionY
+        );
+    }
+
+    // Dibujar las barras de cada usuario.
+    const anchoGrupo = anchoGrafico / datos.length;
+
+    datos.forEach((usuario, indice) => {
+        const centroGrupo =
+            margen.izquierdo + anchoGrupo * indice + anchoGrupo / 2;
+
+        const anchoBarras = Math.min(60, anchoGrupo * 0.75);
+        const anchoBarra = anchoBarras * 0.42;
+        const separacion = anchoBarras * 0.16;
+
+        const posicionOfrece =
+            centroGrupo - separacion / 2 - anchoBarra;
+
+        const posicionBusca = centroGrupo + separacion / 2;
+
+        const alturaOfrece =
+            (usuario.ofrece / escalaMaxima) * altoGrafico;
+
+        const alturaBusca =
+            (usuario.busca / escalaMaxima) * altoGrafico;
+
+        const baseY = margen.superior + altoGrafico;
+
+        contexto.fillStyle = "#0d6efd";
+        contexto.fillRect(
+            posicionOfrece,
+            baseY - alturaOfrece,
+            anchoBarra,
+            alturaOfrece
+        );
+
+        contexto.fillStyle = "#198754";
+        contexto.fillRect(
+            posicionBusca,
+            baseY - alturaBusca,
+            anchoBarra,
+            alturaBusca
+        );
+
+        // Mostrar los valores encima de las barras.
+        contexto.fillStyle = "#212529";
+        contexto.font = "12px Arial";
+        contexto.textAlign = "center";
+        contexto.textBaseline = "bottom";
+
+        if (usuario.ofrece > 0) {
+            contexto.fillText(
+                usuario.ofrece.toString(),
+                posicionOfrece + anchoBarra / 2,
+                baseY - alturaOfrece - 5
+            );
+        }
+
+        if (usuario.busca > 0) {
+            contexto.fillText(
+                usuario.busca.toString(),
+                posicionBusca + anchoBarra / 2,
+                baseY - alturaBusca - 5
+            );
+        }
+
+        // Mostrar el correo debajo de cada grupo.
+        const etiqueta = usuario.email.length > 18
+            ? usuario.email.substring(0, 16) + "…"
+            : usuario.email;
+
+        contexto.fillStyle = "#495057";
+        contexto.font = "12px Arial";
+        contexto.textAlign = "center";
+        contexto.textBaseline = "top";
+
+        contexto.fillText(
+            etiqueta,
+            centroGrupo,
+            baseY + 14,
+            anchoGrupo - 6
+        );
+    });
+}
+
+
 // Construye y actualiza la tabla de intercambios.
 function mostrarIntercambios(intercambios) {
     listaIntercambios.replaceChildren();
@@ -184,6 +376,7 @@ async function cargarIntercambios() {
     });
 
     mostrarIntercambios(intercambios);
+    generarGraficoCanvas(intercambios);
 }
 
 
