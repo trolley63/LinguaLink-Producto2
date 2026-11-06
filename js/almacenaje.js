@@ -352,6 +352,7 @@ export async function actualizarUsuario(id, datosUsuario) {
 }
 
 
+
 export async function eliminarUsuario(id) {
     const identificador = Number(id);
 
@@ -359,24 +360,105 @@ export async function eliminarUsuario(id) {
         throw new Error("El identificador del usuario no es válido.");
     }
 
-    const existente = await ejecutarSolicitud(
-        "usuarios",
-        "readonly",
-        (almacen) => almacen.get(identificador)
-    );
+    const bd = await abrirBaseDatos();
 
-    if (!existente) {
-        throw new Error("No se ha encontrado el usuario que deseas eliminar.");
-    }
+    return new Promise((resolve, reject) => {
+        const transaccion = bd.transaction(
+            ["usuarios", "intercambios", "seleccionados"],
+            "readwrite"
+        );
 
-    await ejecutarSolicitud(
-        "usuarios",
-        "readwrite",
-        (almacen) => almacen.delete(identificador)
-    );
+        const almacenUsuarios = transaccion.objectStore("usuarios");
+        const almacenIntercambios = transaccion.objectStore("intercambios");
+        const almacenSeleccionados = transaccion.objectStore("seleccionados");
 
-    return true;
+        let errorControlado = null;
+        let intercambios = null;
+        let selecciones = null;
+
+        const solicitudUsuario = almacenUsuarios.get(identificador);
+
+        solicitudUsuario.onsuccess = () => {
+            if (!solicitudUsuario.result) {
+                errorControlado = new Error(
+                    "No se ha encontrado el usuario que deseas eliminar."
+                );
+
+                transaccion.abort();
+                return;
+            }
+
+            const solicitudIntercambios = almacenIntercambios.getAll();
+            const solicitudSelecciones = almacenSeleccionados.getAll();
+
+            const procesarDatos = () => {
+                if (intercambios === null || selecciones === null) {
+                    return;
+                }
+
+                const idsIntercambios = new Set(
+                    intercambios
+                        .filter(item => Number(item.idUsuario) === identificador)
+                        .map(item => Number(item.id))
+                );
+
+                intercambios.forEach((item) => {
+                    if (Number(item.idUsuario) === identificador) {
+                        almacenIntercambios.delete(item.id);
+                    }
+                });
+
+                selecciones.forEach((seleccion) => {
+                    const perteneceAlUsuario =
+                        Number(seleccion.idUsuario) === identificador;
+
+                    const intercambioEliminado =
+                        idsIntercambios.has(Number(seleccion.idIntercambio));
+
+                    if (perteneceAlUsuario || intercambioEliminado) {
+                        almacenSeleccionados.delete([
+                            seleccion.idUsuario,
+                            seleccion.idIntercambio
+                        ]);
+                    }
+                });
+
+                almacenUsuarios.delete(identificador);
+            };
+
+            solicitudIntercambios.onsuccess = () => {
+                intercambios = solicitudIntercambios.result;
+                procesarDatos();
+            };
+
+            solicitudSelecciones.onsuccess = () => {
+                selecciones = solicitudSelecciones.result;
+                procesarDatos();
+            };
+        };
+
+        transaccion.oncomplete = () => {
+            resolve(true);
+        };
+
+        transaccion.onerror = () => {
+            reject(
+                errorControlado ||
+                transaccion.error ||
+                new Error("No se ha podido eliminar el usuario.")
+            );
+        };
+
+        transaccion.onabort = () => {
+            reject(
+                errorControlado ||
+                transaccion.error ||
+                new Error("La eliminación del usuario ha sido cancelada.")
+            );
+        };
+    });
 }
+
 
 
 // =====================================================
@@ -550,6 +632,7 @@ export async function actualizarIntercambio(id, datosIntercambio) {
 }
 
 
+
 export async function eliminarIntercambio(id) {
     const identificador = Number(id);
 
@@ -557,24 +640,71 @@ export async function eliminarIntercambio(id) {
         throw new Error("El identificador del intercambio no es válido.");
     }
 
-    const existente = await ejecutarSolicitud(
-        "intercambios",
-        "readonly",
-        (almacen) => almacen.get(identificador)
-    );
+    const bd = await abrirBaseDatos();
 
-    if (!existente) {
-        throw new Error("No se ha encontrado el intercambio que deseas eliminar.");
-    }
+    return new Promise((resolve, reject) => {
+        const transaccion = bd.transaction(
+            ["intercambios", "seleccionados"],
+            "readwrite"
+        );
 
-    await ejecutarSolicitud(
-        "intercambios",
-        "readwrite",
-        (almacen) => almacen.delete(identificador)
-    );
+        const almacenIntercambios = transaccion.objectStore("intercambios");
+        const almacenSeleccionados = transaccion.objectStore("seleccionados");
 
-    return true;
+        let errorControlado = null;
+
+        const solicitudIntercambio = almacenIntercambios.get(identificador);
+
+        solicitudIntercambio.onsuccess = () => {
+            if (!solicitudIntercambio.result) {
+                errorControlado = new Error(
+                    "No se ha encontrado el intercambio que deseas eliminar."
+                );
+
+                transaccion.abort();
+                return;
+            }
+
+            const solicitudSelecciones = almacenSeleccionados.getAll();
+
+            solicitudSelecciones.onsuccess = () => {
+                const selecciones = solicitudSelecciones.result;
+
+                selecciones.forEach((seleccion) => {
+                    if (Number(seleccion.idIntercambio) === identificador) {
+                        almacenSeleccionados.delete([
+                            seleccion.idUsuario,
+                            seleccion.idIntercambio
+                        ]);
+                    }
+                });
+
+                almacenIntercambios.delete(identificador);
+            };
+        };
+
+        transaccion.oncomplete = () => {
+            resolve(true);
+        };
+
+        transaccion.onerror = () => {
+            reject(
+                errorControlado ||
+                transaccion.error ||
+                new Error("No se ha podido eliminar el intercambio.")
+            );
+        };
+
+        transaccion.onabort = () => {
+            reject(
+                errorControlado ||
+                transaccion.error ||
+                new Error("La eliminación del intercambio ha sido cancelada.")
+            );
+        };
+    });
 }
+
 
 
 // =====================================================
