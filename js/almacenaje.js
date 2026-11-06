@@ -16,7 +16,6 @@ export function abrirBaseDatos() {
         );
     }
 
-    // Evita abrir varias conexiones simultáneas.
     if (promesaBaseDatos) {
         return promesaBaseDatos;
     }
@@ -30,7 +29,6 @@ export function abrirBaseDatos() {
         solicitud.onupgradeneeded = (evento) => {
             const bd = evento.target.result;
 
-            // Almacén de usuarios.
             if (!bd.objectStoreNames.contains("usuarios")) {
                 const usuarios = bd.createObjectStore("usuarios", {
                     keyPath: "id",
@@ -42,7 +40,6 @@ export function abrirBaseDatos() {
                 });
             }
 
-            // Almacén de intercambios.
             if (!bd.objectStoreNames.contains("intercambios")) {
                 const intercambios = bd.createObjectStore("intercambios", {
                     keyPath: "id",
@@ -58,7 +55,6 @@ export function abrirBaseDatos() {
                 });
             }
 
-            // Almacén de intercambios seleccionados.
             if (!bd.objectStoreNames.contains("seleccionados")) {
                 const seleccionados = bd.createObjectStore("seleccionados", {
                     keyPath: ["idUsuario", "idIntercambio"]
@@ -70,7 +66,6 @@ export function abrirBaseDatos() {
             }
         };
 
-        // Apertura correcta.
         solicitud.onsuccess = () => {
             const bd = solicitud.result;
 
@@ -82,7 +77,6 @@ export function abrirBaseDatos() {
             resolve(bd);
         };
 
-        // Error durante la apertura.
         solicitud.onerror = () => {
             promesaBaseDatos = null;
 
@@ -105,7 +99,7 @@ export function abrirBaseDatos() {
 
 
 // =====================================================
-// 2. FUNCIÓN AUXILIAR PARA OPERACIONES CON INDEXEDDB
+// 2. OPERACIONES AUXILIARES DE INDEXEDDB
 // =====================================================
 
 function ejecutarSolicitud(nombreAlmacen, modo, crearSolicitud) {
@@ -162,7 +156,6 @@ function ejecutarSolicitud(nombreAlmacen, modo, crearSolicitud) {
 // 3. GENERACIÓN DE CREDENCIALES
 // =====================================================
 
-// Genera un hash de la contraseña mediante PBKDF2.
 async function generarCredenciales(password) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
 
@@ -192,18 +185,15 @@ async function generarCredenciales(password) {
 }
 
 
-// Convierte bytes a Base64 para almacenarlos en IndexedDB.
 function convertirBase64(bytes) {
     return btoa(String.fromCharCode(...bytes));
 }
 
 
 // =====================================================
-// 4. CONSULTA DE DATOS PÚBLICOS DE USUARIOS
+// 4. GESTIÓN DE USUARIOS
 // =====================================================
 
-// Devuelve los datos públicos de un usuario,
-// sin exponer su contraseña ni su hash.
 function obtenerDatosPublicos(usuario) {
     if (!usuario) {
         return null;
@@ -217,17 +207,11 @@ function obtenerDatosPublicos(usuario) {
 }
 
 
-// =====================================================
-// 5. CREACIÓN Y CONSULTA DE USUARIOS
-// =====================================================
-
-// Crea un usuario nuevo.
 export async function crearUsuario(datosUsuario) {
     const nombre = String(datosUsuario?.nombre ?? "").trim();
     const email = String(datosUsuario?.email ?? "").trim().toLowerCase();
     const password = String(datosUsuario?.password ?? "");
 
-    // Validaciones básicas.
     if (!nombre || !email || !password) {
         throw new Error("Todos los campos son obligatorios.");
     }
@@ -238,13 +222,10 @@ export async function crearUsuario(datosUsuario) {
         throw new Error("El correo electrónico no tiene un formato válido.");
     }
 
-    // Permitimos contraseñas de cuatro caracteres,
-    // para admitir también la contraseña 1234 del ejemplo del profesor.
     if (password.length < 4) {
         throw new Error("La contraseña debe tener al menos 4 caracteres.");
     }
 
-    // Genera el hash y la sal antes de guardar el usuario.
     const credenciales = await generarCredenciales(password);
 
     const usuario = {
@@ -276,7 +257,6 @@ export async function crearUsuario(datosUsuario) {
 }
 
 
-// Obtiene todos los usuarios registrados.
 export async function obtenerUsuarios() {
     const usuarios = await ejecutarSolicitud(
         "usuarios",
@@ -288,7 +268,6 @@ export async function obtenerUsuarios() {
 }
 
 
-// Busca un usuario mediante su correo electrónico.
 export async function obtenerUsuarioPorEmail(email) {
     const correo = String(email ?? "").trim().toLowerCase();
 
@@ -306,11 +285,6 @@ export async function obtenerUsuarioPorEmail(email) {
 }
 
 
-// =====================================================
-// 6. MODIFICACIÓN Y ELIMINACIÓN DE USUARIOS
-// =====================================================
-
-// Modifica los datos de un usuario existente.
 export async function actualizarUsuario(id, datosUsuario) {
     const identificador = Number(id);
 
@@ -336,7 +310,6 @@ export async function actualizarUsuario(id, datosUsuario) {
         throw new Error("La contraseña debe tener al menos 4 caracteres.");
     }
 
-    // Recupera el usuario original para conservar sus credenciales.
     const existente = await ejecutarSolicitud(
         "usuarios",
         "readonly",
@@ -353,7 +326,6 @@ export async function actualizarUsuario(id, datosUsuario) {
         email
     };
 
-    // Solo cambia la contraseña si se ha introducido una nueva.
     if (password.length > 0) {
         const credenciales = await generarCredenciales(password);
         Object.assign(usuarioActualizado, credenciales);
@@ -380,7 +352,6 @@ export async function actualizarUsuario(id, datosUsuario) {
 }
 
 
-// Elimina un usuario mediante su identificador.
 export async function eliminarUsuario(id) {
     const identificador = Number(id);
 
@@ -407,11 +378,11 @@ export async function eliminarUsuario(id) {
     return true;
 }
 
-/* =====================================================
-   7. CREACIÓN Y CONSULTA DE INTERCAMBIOS
-   ===================================================== */
 
-// Crea un intercambio asociado a un usuario registrado.
+// =====================================================
+// 5. GESTIÓN DE INTERCAMBIOS
+// =====================================================
+
 export async function crearIntercambio(datosIntercambio) {
     const titulo = String(datosIntercambio?.titulo ?? "").trim();
     const descripcion = String(datosIntercambio?.descripcion ?? "").trim();
@@ -419,7 +390,6 @@ export async function crearIntercambio(datosIntercambio) {
     const tipo = String(datosIntercambio?.tipo ?? "").trim();
     const idUsuario = Number(datosIntercambio?.idUsuario);
 
-    // Validación de campos obligatorios.
     if (!titulo || !descripcion || !fecha || !tipo) {
         throw new Error("Todos los campos del intercambio son obligatorios.");
     }
@@ -428,19 +398,16 @@ export async function crearIntercambio(datosIntercambio) {
         throw new Error("El identificador del usuario no es válido.");
     }
 
-    // Validación de fecha.
     if (Number.isNaN(Date.parse(fecha))) {
         throw new Error("La fecha del intercambio no es válida.");
     }
 
-    // Validación del tipo de intercambio.
     const tiposPermitidos = ["Ofrezco idioma", "Busco idioma"];
 
     if (!tiposPermitidos.includes(tipo)) {
         throw new Error("El tipo de intercambio no es válido.");
     }
 
-    // Comprobar que el usuario existe.
     const usuario = await ejecutarSolicitud(
         "usuarios",
         "readonly",
@@ -451,7 +418,6 @@ export async function crearIntercambio(datosIntercambio) {
         throw new Error("No existe el usuario asociado al intercambio.");
     }
 
-    // El correo se obtiene del usuario registrado.
     const intercambio = {
         titulo,
         descripcion,
@@ -474,7 +440,6 @@ export async function crearIntercambio(datosIntercambio) {
 }
 
 
-// Obtiene todos los intercambios registrados.
 export async function obtenerIntercambios() {
     return await ejecutarSolicitud(
         "intercambios",
@@ -484,7 +449,6 @@ export async function obtenerIntercambios() {
 }
 
 
-// Obtiene los intercambios publicados por un usuario.
 export async function obtenerIntercambiosPorUsuario(idUsuario) {
     const identificador = Number(idUsuario);
 
@@ -500,7 +464,6 @@ export async function obtenerIntercambiosPorUsuario(idUsuario) {
 }
 
 
-// Busca un intercambio por su identificador.
 export async function obtenerIntercambioPorId(id) {
     const identificador = Number(id);
 
@@ -515,11 +478,7 @@ export async function obtenerIntercambioPorId(id) {
     );
 }
 
-/* =====================================================
-   8. MODIFICACIÓN Y ELIMINACIÓN DE INTERCAMBIOS
-   ===================================================== */
 
-// Modifica un intercambio existente.
 export async function actualizarIntercambio(id, datosIntercambio) {
     const identificador = Number(id);
 
@@ -551,7 +510,6 @@ export async function actualizarIntercambio(id, datosIntercambio) {
         throw new Error("El identificador del usuario no es válido.");
     }
 
-    // Comprobar que el intercambio existe.
     const existente = await ejecutarSolicitud(
         "intercambios",
         "readonly",
@@ -562,7 +520,6 @@ export async function actualizarIntercambio(id, datosIntercambio) {
         throw new Error("No se ha encontrado el intercambio que deseas modificar.");
     }
 
-    // Comprobar que el usuario asociado existe.
     const usuario = await ejecutarSolicitud(
         "usuarios",
         "readonly",
@@ -593,7 +550,6 @@ export async function actualizarIntercambio(id, datosIntercambio) {
 }
 
 
-// Elimina un intercambio mediante su identificador.
 export async function eliminarIntercambio(id) {
     const identificador = Number(id);
 
@@ -620,11 +576,11 @@ export async function eliminarIntercambio(id) {
     return true;
 }
 
-/* =====================================================
-   9. GESTIÓN DE SELECCIONES DEL DASHBOARD
-   ===================================================== */
 
-// Guarda un intercambio en la selección de un usuario.
+// =====================================================
+// 6. GESTIÓN DE SELECCIONES DEL DASHBOARD
+// =====================================================
+
 export async function guardarSeleccion(idUsuario, idIntercambio) {
     const identificadorUsuario = Number(idUsuario);
     const identificadorIntercambio = Number(idIntercambio);
@@ -637,7 +593,6 @@ export async function guardarSeleccion(idUsuario, idIntercambio) {
         throw new Error("El identificador del intercambio no es válido.");
     }
 
-    // Comprobar que el usuario existe.
     const usuario = await ejecutarSolicitud(
         "usuarios",
         "readonly",
@@ -648,7 +603,6 @@ export async function guardarSeleccion(idUsuario, idIntercambio) {
         throw new Error("No existe el usuario seleccionado.");
     }
 
-    // Comprobar que el intercambio existe.
     const intercambio = await ejecutarSolicitud(
         "intercambios",
         "readonly",
@@ -665,7 +619,6 @@ export async function guardarSeleccion(idUsuario, idIntercambio) {
         fechaSeleccion: new Date().toISOString()
     };
 
-    // put evita duplicar una selección del mismo intercambio.
     await ejecutarSolicitud(
         "seleccionados",
         "readwrite",
@@ -676,7 +629,6 @@ export async function guardarSeleccion(idUsuario, idIntercambio) {
 }
 
 
-// Recupera los intercambios seleccionados por un usuario.
 export async function obtenerSeleccionados(idUsuario) {
     const identificadorUsuario = Number(idUsuario);
 
@@ -690,7 +642,6 @@ export async function obtenerSeleccionados(idUsuario) {
         (almacen) => almacen.index("idUsuario").getAll(identificadorUsuario)
     );
 
-    // Recuperar los datos completos de cada intercambio.
     const intercambios = await Promise.all(
         selecciones.map(async (seleccion) => {
             const intercambio = await obtenerIntercambioPorId(
@@ -708,12 +659,10 @@ export async function obtenerSeleccionados(idUsuario) {
         })
     );
 
-    // Ignorar selecciones cuyo intercambio ya no exista.
     return intercambios.filter(Boolean);
 }
 
 
-// Retira un intercambio de la selección de un usuario.
 export async function eliminarSeleccion(idUsuario, idIntercambio) {
     const identificadorUsuario = Number(idUsuario);
     const identificadorIntercambio = Number(idIntercambio);
@@ -750,5 +699,3 @@ export async function eliminarSeleccion(idUsuario, idIntercambio) {
 
     return true;
 }
-
-
