@@ -790,3 +790,67 @@ export async function autenticarUsuario(email, password) {
     return obtenerDatosPublicos(usuario);
 }
 
+
+/* =====================================================
+   8. GESTIÓN DE SESIONES
+   ===================================================== */
+
+const CLAVE_SESION = "usuarioActivo";
+
+
+// Inicia sesión y guarda el correo del usuario en localStorage.
+export async function loguearUsuario(email, password) {
+    const usuario = await autenticarUsuario(email, password);
+
+    if (!usuario) {
+        return null;
+    }
+
+    try {
+        localStorage.setItem(CLAVE_SESION, usuario.email);
+    } catch (error) {
+        throw new Error("No se pudo guardar la sesión en el navegador.");
+    }
+
+    return usuario;
+}
+
+
+// Recupera los datos del usuario que tiene la sesión activa.
+export async function obtenerUsuarioActivo() {
+    let email;
+
+    try {
+        email = localStorage.getItem(CLAVE_SESION);
+    } catch (error) {
+        throw new Error("No se pudo acceder al almacenamiento de sesión.");
+    }
+
+    if (!email) {
+        return null;
+    }
+
+    const usuario = await obtenerUsuarioPorEmail(email);
+
+    if (!usuario) {
+        localStorage.removeItem(CLAVE_SESION);
+        return null;
+    }
+
+    return usuario;
+}
+
+
+// Comprueba si existe una sesión válida.
+export async function haySesionActiva() {
+    const usuario = await obtenerUsuarioActivo();
+
+    return usuario !== null;
+}
+
+
+// Cierra la sesión del usuario actual.
+export function cerrarSesion() {
+    localStorage.removeItem(CLAVE_SESION);
+}
+
