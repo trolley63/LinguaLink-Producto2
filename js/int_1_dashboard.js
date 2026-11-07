@@ -2,7 +2,9 @@
 import {
     obtenerIntercambios,
     obtenerUsuarioActivo,
-    obtenerSeleccionados
+    obtenerSeleccionados,
+    guardarSeleccion,
+    eliminarSeleccion
 } from "./almacenaje.js";
 
 const zonaDisponibles = document.getElementById(
@@ -29,15 +31,43 @@ function formatearFecha(fecha) {
 
 
 // Crea una tarjeta con la información de un intercambio.
-function crearTarjeta(intercambio) {
+
+function crearTarjeta(intercambio, origen) {
     const tarjeta = document.createElement("article");
     tarjeta.className = "card shadow-sm";
+    tarjeta.draggable = Boolean(usuarioActivo);
+
+    tarjeta.dataset.intercambioId = intercambio.id;
+    tarjeta.dataset.origen = origen;
+
+    if (usuarioActivo) {
+        tarjeta.addEventListener("dragstart", (evento) => {
+            evento.dataTransfer.effectAllowed = "move";
+            evento.dataTransfer.setData(
+                "text/plain",
+                String(intercambio.id)
+            );
+            evento.dataTransfer.setData(
+                "application/x-lingualink-origen",
+                origen
+            );
+
+            tarjeta.classList.add("opacity-50");
+        });
+
+        tarjeta.addEventListener("dragend", () => {
+            tarjeta.classList.remove("opacity-50");
+            zonaDisponibles.classList.remove("border", "border-primary");
+            zonaSeleccionados.classList.remove("border", "border-primary");
+        });
+    }
 
     const cuerpo = document.createElement("div");
     cuerpo.className = "card-body";
 
     const cabecera = document.createElement("div");
-    cabecera.className = "d-flex justify-content-between align-items-start gap-2 mb-3";
+    cabecera.className =
+        "d-flex justify-content-between align-items-start gap-2 mb-3";
 
     const titulo = document.createElement("h3");
     titulo.className = "h6 mb-0";
@@ -79,6 +109,7 @@ function crearTarjeta(intercambio) {
 }
 
 
+
 // Muestra un mensaje cuando una zona no tiene intercambios.
 function mostrarMensajeVacio(zona, texto) {
     const mensaje = document.createElement("div");
@@ -104,7 +135,7 @@ function mostrarDisponibles(intercambios) {
 
     intercambios.forEach((intercambio) => {
         zonaDisponibles.appendChild(
-            crearTarjeta(intercambio)
+            crearTarjeta(intercambio, "disponibles")
         );
     });
 }
@@ -132,8 +163,83 @@ function mostrarSeleccionados(intercambios) {
 
     intercambios.forEach((intercambio) => {
         zonaSeleccionados.appendChild(
-            crearTarjeta(intercambio)
+            crearTarjeta(intercambio, "seleccionados")
         );
+    });
+}
+
+
+function configurarZonaDestino(zonaDestino, nombreZona) {
+
+    // Permite soltar tarjetas en la zona.
+    zonaDestino.addEventListener("dragover", (evento) => {
+        evento.preventDefault();
+
+        if (usuarioActivo) {
+            evento.dataTransfer.dropEffect = "move";
+            zonaDestino.classList.add("border", "border-primary");
+        }
+    });
+
+    // Elimina el resaltado cuando la tarjeta sale de la zona.
+    zonaDestino.addEventListener("dragleave", (evento) => {
+        if (!zonaDestino.contains(evento.relatedTarget)) {
+            zonaDestino.classList.remove("border", "border-primary");
+        }
+    });
+
+    // Procesa el intercambio cuando se suelta la tarjeta.
+    zonaDestino.addEventListener("drop", async (evento) => {
+        evento.preventDefault();
+
+        zonaDestino.classList.remove("border", "border-primary");
+
+        if (!usuarioActivo) {
+            return;
+        }
+
+        const idIntercambio = Number(
+            evento.dataTransfer.getData("text/plain")
+        );
+
+        const origen = evento.dataTransfer.getData(
+            "application/x-lingualink-origen"
+        );
+
+        if (
+            !Number.isInteger(idIntercambio) ||
+            idIntercambio <= 0 ||
+            !origen ||
+            origen === nombreZona
+        ) {
+            return;
+        }
+
+        try {
+            if (origen === "disponibles" && nombreZona === "seleccionados") {
+                await guardarSeleccion(
+                    usuarioActivo.id,
+                    idIntercambio
+                );
+
+            } else if (
+                origen === "seleccionados" &&
+                nombreZona === "disponibles"
+            ) {
+                await eliminarSeleccion(
+                    usuarioActivo.id,
+                    idIntercambio
+                );
+
+            } else {
+                return;
+            }
+
+            await cargarDashboard();
+
+        } catch (error) {
+            window.alert(error.message);
+        }
     });
 }
 
@@ -190,6 +296,16 @@ async function cargarDashboard() {
 
 // Inicializa el Dashboard.
 function inicializarDashboard() {
+    configurarZonaDestino(
+        zonaDisponibles,
+        "disponibles"
+    );
+
+    configurarZonaDestino(
+        zonaSeleccionados,
+        "seleccionados"
+    );
+
     cargarDashboard();
 }
 
